@@ -71,19 +71,42 @@
       <div class="schedule-header">
         <div>
           <div class="section-heading"><span class="step">03</span><h2 id="dashboard-title">Submitted Availability</h2></div>
-          <p class="hint">Browse submitted weekly availability from students and coaches.</p>
+          <p class="hint">See where students and coaches are available together. This calendar is read only.</p>
         </div>
         <button id="refresh-availability" class="button button-quiet" type="button">Refresh</button>
       </div>
       <p class="dashboard-note">This is a temporary development view. Coach access is not authenticated yet.</p>
       <p id="dashboard-status" class="dashboard-status hint" role="status" aria-live="polite" aria-atomic="true"></p>
-      <div id="dashboard-results" class="dashboard-scroll" role="region" aria-label="Submitted availability table" tabindex="0" hidden>
+      <div id="dashboard-results" hidden>
+        <div class="calendar-legend-area">
+          <h3>People <span class="hint">· C = Coach</span></h3>
+          <ul id="calendar-legend" class="calendar-legend" aria-label="People and their colors"></ul>
+        </div>
+        <p class="hint calendar-help">30-minute slots · Hover a label for its full name. Use “more” to see everyone in a busy slot.</p>
+        <div class="calendar-scroll" role="region" aria-label="Read-only weekly availability calendar" tabindex="0">
+          <table class="coach-calendar">
+            <caption class="sr-only">People available each half hour, Monday through Sunday. Coaches are shown first.</caption>
+            <thead><tr><th scope="col" class="calendar-time">Time</th><th scope="col">Monday</th><th scope="col">Tuesday</th><th scope="col">Wednesday</th><th scope="col">Thursday</th><th scope="col">Friday</th><th scope="col">Saturday</th><th scope="col">Sunday</th></tr></thead>
+            <tbody id="calendar-rows"></tbody>
+          </table>
+        </div>
+        <details id="dashboard-details" class="dashboard-details">
+          <summary>Detailed view</summary>
+          <div class="dashboard-scroll" role="region" aria-label="Submitted availability table" tabindex="0">
         <table class="dashboard-table">
           <caption class="sr-only">Submitted availability sorted by weekday, start time, and name</caption>
           <thead><tr><th scope="col">Name</th><th scope="col">Role</th><th scope="col">Day</th><th scope="col">Start time</th><th scope="col">End time</th></tr></thead>
           <tbody id="dashboard-rows"></tbody>
         </table>
+          </div>
+        </details>
       </div>
+      <dialog id="slot-dialog" class="slot-dialog" aria-labelledby="slot-dialog-title">
+        <h3 id="slot-dialog-title"></h3>
+        <p class="hint">Everyone available for this half hour</p>
+        <ul id="slot-dialog-people" class="slot-dialog-people"></ul>
+        <form method="dialog"><button class="button button-quiet">Close</button></form>
+      </dialog>
     </section>
   </main>
 </body>

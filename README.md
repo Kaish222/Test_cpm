@@ -95,7 +95,7 @@ create policy availability_anonymous_select on public.availability
 
 `fetchAllAvailability()` queries `availability` with `people(name, role)` nested in the SELECT. Supabase uses the existing `availability.person_id → people.id` foreign key to join each range to its person. No separate per-person requests are made. The function fetches batches of up to 500 rows ordered by UUID, requesting IDs after the last fetched row until an empty batch. This avoids truncation at the usual API limit, including when a project uses a lower row limit. A missing/unreadable related person triggers an error rather than silently hiding availability. People without any availability do not produce table rows.
 
-`renderAvailabilityTable()` sorts the full result by an explicit Monday–Sunday array, then start time, then name (case-insensitive English comparison). UUID breaks otherwise identical ties. Each stored range is displayed unchanged, with times formatted as HH:MM. Names are inserted with `textContent`, never interpreted as HTML. Day-first ordering takes priority over grouping by person.
+The main dashboard is a read-only weekly calendar. The original table remains in the collapsible **Detailed view** below it. `renderAvailabilityTable()` sorts that table by Monday–Sunday, start time, then name. UUID breaks otherwise identical ties. Stored ranges are displayed unchanged with times formatted as HH:MM. Names are inserted with `textContent`, never interpreted as HTML.
 
 `loadCoachDashboard()` runs on choosing Coach and clicking Refresh. It disables Refresh during loading, uses a 30-second timeout, and shows friendly errors. Switching to Student or the blank role hides the section, aborts loading and clears its rows/status. Stale responses cannot repopulate it. Submitting new availability retains the existing save behavior; click Refresh afterward to see the new record. Multiple pages are not a transactional snapshot, so refresh after concurrent submissions or dashboard deletions.
 
@@ -111,3 +111,23 @@ create policy availability_anonymous_select on public.availability
 8. On a narrow screen, horizontally scroll the dashboard table. Confirm the original grid selection, validation and submission still work.
 
 Mocked tests can verify sorting, pagination and UI request handling without a database. Live persistence and permissions still require verification against your configured Supabase project. No authentication, editing, deletion or scheduling has been added.
+
+## Visual weekly calendar
+
+`buildCalendarData()` converts each stored range into fully covered half-hour slots. For example, 17:00–19:00 fills 17:00, 17:30, 18:00 and 18:30, but not 19:00. The existing 22:00 row represents 22:00–22:30. A Set of person IDs per cell prevents duplicate labels if the same person's ranges overlap. Different people with the same name remain distinct by UUID.
+
+`getColorForPerson()` hashes the person UUID using FNV-1a and maps the result to a fixed 12-color pastel palette. The same ID keeps its color across slots, refreshes and reloads; palette colors may repeat. Colors are never stored in Supabase. A repeated submission creates a different person UUID and can therefore receive a different color.
+
+Within each cell and the legend, coaches come first, then students, with alphabetical names inside each group. Coach labels are bold and carry a small **C** badge; the legend also spells out each role. The cells contain no editing or selection controls.
+
+Each slot shows at most three labels and a **+N more** button. Click it (or use Tab and Enter) to open a scrollable native dialog listing everyone in that slot, including full names. Escape or Close dismisses it. Hovering a label shows its full name and role. Fixed-height cell contents keep crowded slots from expanding the grid. The weekly calendar scrolls horizontally and vertically, with sticky day headings and a sticky time column.
+
+Refresh uses the existing single data-loading operation (including pagination when required), then rebuilds the calendar, legend and detailed table from those same results. There are no per-person or per-slot queries. Switching away from Coach clears all views and cancels pending loading. No schema/configuration changes are needed beyond the previously documented dashboard SELECT migration.
+
+### Test overlaps
+
+1. Submit student Kaif for Monday 17:00–19:00 and coach Alice for Monday 18:00–20:00. Choose Coach and click Refresh.
+2. Kaif should appear alone at 17:00/17:30. Alice (bold with C) and Kaif should both appear at 18:00/18:30, with Alice first. At 19:00/19:30 only Alice should appear; 20:00 must be empty.
+3. Add enough submissions overlapping 18:00 to exceed three people. Verify **+N more** opens a complete sorted list and that Escape/Close works without changing any availability.
+4. Verify each person's legend color matches every label. Refresh/reload and confirm colors are stable. Expand Detailed view to compare stored ranges.
+5. Narrow the browser and scroll horizontally; time labels should stay visible. Select Student and verify the entire dashboard disappears. Verify the original selection grid and submission still work.

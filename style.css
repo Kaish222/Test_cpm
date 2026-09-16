@@ -3,6 +3,7 @@
 body { margin: 0; }
 button, input, select { font: inherit; }
 button { cursor: pointer; }
+button:disabled, input:disabled, select:disabled { cursor: wait; opacity: .65; }
 .planner { max-width: 1120px; margin: 0 auto; padding: 48px 32px 32px; }
 .page-header { margin-bottom: 30px; }
 .eyebrow { color: #52756d; font-size: 11px; letter-spacing: .16em; font-weight: 700; }

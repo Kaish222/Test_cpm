@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Availability Planner</title>
   <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+  <script src="supabase-config.js" defer></script>
+  <script src="supabase-api.js" defer></script>
   <script src="script.js" defer></script>
 </head>
 <body>
@@ -21,7 +24,7 @@
         <div class="fields">
           <div class="field">
             <label for="person-name">Your name</label>
-            <input id="person-name" name="name" type="text" autocomplete="name" placeholder="e.g. Kaif" required aria-describedby="name-error">
+            <input id="person-name" name="name" type="text" autocomplete="name" placeholder="e.g. Kaif" maxlength="120" required aria-describedby="name-error">
             <p class="error" id="name-error"></p>
           </div>
           <div class="field">
@@ -60,7 +63,7 @@
         <p id="availability-error" class="error grid-error"></p>
       </section>
 
-      <div class="submit-row"><p class="hint">Preview only. Your availability stays on this page.</p><button class="button button-primary" type="submit">Submit availability <span aria-hidden="true">→</span></button></div>
+      <div class="submit-row"><p class="hint">Submit to save your name, role, and availability.</p><button class="button button-primary" type="submit">Submit availability <span aria-hidden="true">→</span></button></div>
       <p id="form-status" class="form-status" role="status" aria-live="polite" aria-atomic="true"></p>
     </form>
   </main>

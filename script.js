@@ -15,6 +15,9 @@ const statusMessage = document.querySelector("#form-status");
 let drag = null;
 let focusedSlot = null;
 let validationShown = false;
+let isSubmitting = false;
+const submitButton = form.querySelector('button[type="submit"]');
+const submitButtonLabel = submitButton.innerHTML;
 
 function formatTime(minutes) {
   return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
@@ -92,7 +95,7 @@ function paintSlot(button) {
 
 grid.addEventListener("pointerdown", (event) => {
   const button = event.target.closest(".slot");
-  if (!button || event.button !== 0 || !event.isPrimary || drag) return;
+  if (!button || isSubmitting || event.button !== 0 || !event.isPrimary || drag) return;
   event.preventDefault();
   focusSlot(button);
   drag = { pointerId: event.pointerId, available: button.getAttribute("aria-pressed") !== "true", visited: new Set(), x: event.clientX, y: event.clientY };
@@ -130,7 +133,7 @@ window.addEventListener("blur", endDrag);
 grid.addEventListener("click", (event) => {
   const button = event.target.closest(".slot");
   // Pointer gestures already painted; zero-detail clicks come from keyboard/assistive activation.
-  if (!button || event.detail !== 0) return;
+  if (!button || isSubmitting || event.detail !== 0) return;
   focusSlot(button);
   setSlot(button, button.getAttribute("aria-pressed") !== "true");
   selectionChanged();
@@ -155,6 +158,7 @@ grid.addEventListener("keydown", (event) => {
 });
 
 document.querySelector("#clear-all").addEventListener("click", () => {
+  if (isSubmitting) return;
   endDrag({});
   selectedSlots.clear();
   slotButtons.flat().forEach((button) => button.setAttribute("aria-pressed", "false"));
@@ -163,7 +167,7 @@ document.querySelector("#clear-all").addEventListener("click", () => {
 
 function validateForm() {
   const errors = {
-    name: nameInput.value.trim() ? "" : "Please enter your name.",
+    name: !nameInput.value.trim() ? "Please enter your name." : nameInput.value.trim().length > 120 ? "Please keep your name to 120 characters or fewer." : "",
     role: ["student", "coach"].includes(roleInput.value) ? "" : "Please choose Student or Coach.",
     availability: selectedSlots.size ? "" : "Select at least one time slot that works for you."
   };
@@ -175,7 +179,7 @@ function validateForm() {
   return errors;
 }
 
-// This pure conversion is independent of the UI and can feed a future API call.
+// This pure conversion stays independent of the UI and database transport.
 function buildAvailabilityData(name, role, selection) {
   const availability = {};
   DAYS.forEach((day, dayIndex) => {
@@ -198,8 +202,9 @@ function buildAvailabilityData(name, role, selection) {
   if (validationShown) validateForm();
 }));
 
-form.addEventListener("submit", (event) => {
+form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (isSubmitting) return;
   validationShown = true;
   const errors = validateForm();
   const invalid = Object.values(errors).some(Boolean);
@@ -212,8 +217,27 @@ form.addEventListener("submit", (event) => {
     return;
   }
   const data = buildAvailabilityData(nameInput.value, roleInput.value, selectedSlots);
-  console.log(data);
-  statusMessage.textContent = "Availability ready! Your merged time ranges are logged in the browser console. Nothing has been sent or saved.";
+  endDrag({});
+  isSubmitting = true;
+  const controls = Array.from(form.querySelectorAll("input, select, button"));
+  const disabledStates = controls.map((control) => control.disabled);
+  controls.forEach((control) => { control.disabled = true; });
+  form.setAttribute("aria-busy", "true");
+  submitButton.textContent = "Saving...";
+  statusMessage.textContent = "Saving your availability...";
+  try {
+    await window.availabilityStorage.submitAvailability(data);
+    statusMessage.textContent = "Availability saved successfully.";
+  } catch (error) {
+    console.error("Availability submission failed:", error);
+    statusMessage.classList.add("is-error");
+    statusMessage.textContent = "We couldn't confirm your save. Your selections are still here. Check your connection or ask the site owner to check setup. If the connection dropped, check the database before retrying to avoid duplicates.";
+  } finally {
+    controls.forEach((control, index) => { control.disabled = disabledStates[index]; });
+    submitButton.innerHTML = submitButtonLabel;
+    form.removeAttribute("aria-busy");
+    isSubmitting = false;
+  }
 });
 
 buildGrid();

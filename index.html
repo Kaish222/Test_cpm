@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Availability Planner</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <main class="planner">
+    <header class="page-header">
+      <p class="eyebrow">LESSONS · WEEKLY AVAILABILITY</p>
+      <h1>Availability Planner</h1>
+      <p>Make room for your next lesson. Choose the times that usually work for you.</p>
+    </header>
+
+    <form id="availability-form" novalidate>
+      <section class="card profile" aria-labelledby="profile-title">
+        <div class="section-heading"><span class="step">01</span><h2 id="profile-title">A little about you</h2></div>
+        <div class="fields">
+          <div class="field">
+            <label for="person-name">Your name</label>
+            <input id="person-name" name="name" type="text" autocomplete="name" placeholder="e.g. Kaif" required aria-describedby="name-error">
+            <p class="error" id="name-error"></p>
+          </div>
+          <div class="field">
+            <label for="person-role">Your role</label>
+            <select id="person-role" name="role" required aria-describedby="role-error">
+              <option value="">Choose your role</option>
+              <option value="student">Student</option>
+              <option value="coach">Coach</option>
+            </select>
+            <p class="error" id="role-error"></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card schedule" aria-labelledby="schedule-title">
+        <div class="schedule-header">
+          <div>
+            <div class="section-heading"><span class="step">02</span><h2 id="schedule-title">Your weekly availability</h2></div>
+            <p id="grid-help" class="hint">Click or drag to select. Start on a selected slot to erase.</p>
+          </div>
+          <span class="legend"><span class="legend-swatch"></span> Available</span>
+        </div>
+        <div class="grid-meta"><span>30-minute slots · 08:00–22:30</span><span>Repeats every week</span></div>
+        <div class="grid-scroll" role="region" aria-label="Weekly availability; scroll for more days and times" tabindex="0">
+          <table id="availability-grid" aria-describedby="grid-help keyboard-help availability-error">
+            <caption class="sr-only">Weekly availability, Monday through Sunday</caption>
+            <thead><tr><th scope="col" class="time-heading">TIME</th><th scope="col">Monday</th><th scope="col">Tuesday</th><th scope="col">Wednesday</th><th scope="col">Thursday</th><th scope="col">Friday</th><th scope="col" class="weekend">Saturday</th><th scope="col" class="weekend">Sunday</th></tr></thead>
+            <tbody id="time-slots"></tbody>
+          </table>
+        </div>
+        <div class="schedule-footer">
+          <p id="selection-summary" role="status">No availability selected yet</p>
+          <button id="clear-all" class="button button-quiet" type="button">Clear all</button>
+        </div>
+        <p id="keyboard-help" class="hint keyboard-help">Keyboard: use arrow keys to move between slots, and Space or Enter to toggle. On touch screens, drag inside the grid to select; use its edges to scroll.</p>
+        <p id="availability-error" class="error grid-error"></p>
+      </section>
+
+      <div class="submit-row"><p class="hint">Preview only. Your availability stays on this page.</p><button class="button button-primary" type="submit">Submit availability <span aria-hidden="true">→</span></button></div>
+      <p id="form-status" class="form-status" role="status" aria-live="polite" aria-atomic="true"></p>
+    </form>
+  </main>
+</body>
+</html>

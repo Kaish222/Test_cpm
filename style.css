@@ -51,4 +51,16 @@ tr.hour-start td, tr.hour-start th { border-top: 1px solid #dce5e1; }
 .form-status { font-size: 14px; line-height: 1.6; color: #216c57; }
 .form-status.is-error { color: #a43830; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.coach-dashboard { margin-top: 24px; }
+.dashboard-note { margin: 0 28px; padding: 10px 12px; background: #f4f7f5; border-radius: 6px; color: #657772; font-size: 12px; line-height: 1.6; }
+.dashboard-status { margin: 16px 28px; }
+.dashboard-status.is-error { color: #a43830; }
+.dashboard-scroll { overflow-x: auto; border-top: 1px solid #dce5e1; }
+.dashboard-table { min-width: 620px; user-select: text; -webkit-user-select: text; }
+.dashboard-table th { text-align: left; padding: 12px 18px; position: static; }
+.dashboard-table td { padding: 12px 18px; border-left: 0; height: auto; font-size: 13px; overflow-wrap: anywhere; }
+.dashboard-table th:first-child { width: 30%; }
+.dashboard-table td:nth-last-child(-n+2) { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dashboard-table tbody tr:nth-child(even) { background: #fafcfb; }
+@media (max-width: 640px) { .dashboard-note { margin-inline: 18px; } .dashboard-status { margin-inline: 18px; } }
 @media (max-width: 640px) { .planner { padding: 28px 16px; } .profile { padding: 20px 18px 10px; } .fields { grid-template-columns: 1fr; gap: 4px; } .schedule-header { padding: 20px 18px; align-items: flex-start; flex-direction: column; gap: 12px; } .grid-meta { padding-inline: 18px; gap: 10px; } .schedule-footer { padding-inline: 18px; } .keyboard-help, .grid-error { padding-inline: 18px; } .submit-row { align-items: stretch; flex-direction: column; gap: 14px; } .button-primary { justify-content: center; } .grid-scroll { max-height: 510px; } }

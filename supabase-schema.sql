@@ -39,10 +39,17 @@ create policy people_anonymous_insert on public.people
   for insert to anon with check (true);
 create policy availability_anonymous_insert on public.availability
   for insert to anon with check (true);
--- No SELECT, UPDATE or DELETE grants/policies for anonymous callers.
+-- Temporary public reads for the coach development dashboard.
+grant select (id, name, role) on public.people to anon;
+grant select (id, person_id, day, start_time, end_time) on public.availability to anon;
+create policy people_anonymous_select on public.people
+  for select to anon using (true);
+create policy availability_anonymous_select on public.availability
+  for select to anon using (true);
+-- No UPDATE or DELETE grants/policies for anonymous callers.
 
 -- Both inserts run in one transaction. Any error rolls back both.
--- SECURITY INVOKER obeys the caller's INSERT-only grants and RLS policies.
+-- SECURITY INVOKER obeys the caller's grants and RLS policies.
 create function public.submit_availability(p_name text, p_role text, p_ranges jsonb)
 returns uuid
 language plpgsql

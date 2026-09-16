@@ -53,5 +53,31 @@ window.availabilityStorage = (() => {
     }
   }
 
-  return { submitAvailability };
+  async function fetchAllAvailability(signal) {
+    const supabaseClient = getClient();
+    const rows = [];
+    let lastId = null;
+    // Page by a unique key so the API's default row limit does not truncate results.
+    while (true) {
+      if (signal?.aborted) throw new Error("Availability loading was cancelled.");
+      let query = supabaseClient.from("availability")
+        .select("id, person_id, day, start_time, end_time, people(name, role)")
+        .order("id", { ascending: true }).limit(500);
+      if (lastId) query = query.gt("id", lastId);
+      if (signal) query = query.abortSignal(signal);
+      const { data, error } = await query;
+      if (error) throw error;
+      if (!Array.isArray(data)) throw new Error("Unexpected availability response.");
+      if (data.length === 0) break;
+      for (const row of data) {
+        if (!row.people) throw new Error("Related person is unreadable. Check SELECT policies on people.");
+        rows.push({ id: row.id, person_id: row.person_id, name: row.people.name, role: row.people.role,
+          day: row.day, start_time: row.start_time, end_time: row.end_time });
+      }
+      lastId = data[data.length - 1].id;
+    }
+    return rows;
+  }
+
+  return { submitAvailability, fetchAllAvailability };
 })();

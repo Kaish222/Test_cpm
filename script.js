@@ -71,7 +71,9 @@ async function loadSavedName() {
   } catch (error) {
     if (nameRequest !== request) return;
     console.error("Name lookup failed:", error);
-    nameStatus.textContent = "Could not load this name. Check your connection and database setup, then leave the name field to retry.";
+    nameStatus.textContent = error.code === "PGRST202"
+      ? "Database setup is incomplete: run supabase-unique-names.sql in Supabase SQL Editor. The name lookup function is missing, so we cannot yet check new or existing names. Reload this page after setup succeeds."
+      : "Could not check this name. This does not mean the name already exists. Check your connection, then leave the name field to retry.";
   } finally {
     clearTimeout(timeout);
     if (nameRequest === request) nameRequest = null;

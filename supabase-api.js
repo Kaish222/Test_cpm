@@ -27,10 +27,11 @@ window.availabilityStorage = (() => {
   }
 
   function buildAvailabilityRows(availability) {
-    return Object.entries(availability).flatMap(([day, ranges]) => ranges.map(({ start, end }) => ({
+    return Object.entries(availability).flatMap(([day, ranges]) => ranges.map(({ start, end, preference }) => ({
       day,
       start_time: start,
-      end_time: end
+      end_time: end,
+      preference: window.AvailabilityPreferences.normalize(preference)
     })));
   }
 
@@ -40,7 +41,8 @@ window.availabilityStorage = (() => {
     const timeout = setTimeout(() => controller.abort(), 20000);
     try {
       // Atomically create or replace the schedule for this unique name.
-      const { data, error } = await supabaseClient.rpc("submit_availability", {
+      // A versioned endpoint prevents an old database function silently dropping preferences.
+      const { data, error } = await supabaseClient.rpc("submit_availability_with_preferences", {
         p_name: person.name,
         p_role: person.role,
         p_ranges: buildAvailabilityRows(person.availability)
@@ -61,7 +63,7 @@ window.availabilityStorage = (() => {
     while (true) {
       if (signal?.aborted) throw new Error("Availability loading was cancelled.");
       let query = supabaseClient.from("availability")
-        .select("id, person_id, day, start_time, end_time, people(name, role)")
+        .select("id, person_id, day, start_time, end_time, preference, people(name, role)")
         .order("id", { ascending: true }).limit(500);
       if (lastId) query = query.gt("id", lastId);
       if (signal) query = query.abortSignal(signal);
@@ -72,7 +74,8 @@ window.availabilityStorage = (() => {
       for (const row of data) {
         if (!row.people) throw new Error("Related person is unreadable. Check SELECT policies on people.");
         rows.push({ id: row.id, person_id: row.person_id, name: row.people.name, role: row.people.role,
-          day: row.day, start_time: row.start_time, end_time: row.end_time });
+          day: row.day, start_time: row.start_time, end_time: row.end_time,
+          preference: window.AvailabilityPreferences.normalize(row.preference) });
       }
       lastId = data[data.length - 1].id;
     }

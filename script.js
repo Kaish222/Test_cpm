@@ -1,11 +1,17 @@
 "use strict";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
-const FIRST_SLOT = 8 * 60;
-const LAST_SLOT = 22 * 60;
-const SLOT_LENGTH = 30;
+const FIRST_SLOT = 11 * 60 + 40;
+const LAST_SLOT = 19 * 60 - 20;
+const SLOT_LENGTH = 20;
 const SLOT_COUNT = (LAST_SLOT - FIRST_SLOT) / SLOT_LENGTH + 1;
-const selectedSlots = new Set();
+const selectedSlots = new Map();
+const preferences = window.AvailabilityPreferences;
+let activeMode = "available";
+const modeInputs = Array.from(document.querySelectorAll('input[name="availability-mode"]'));
+modeInputs.forEach(input => input.addEventListener("change", () => {
+  if (input.checked) activeMode = input.value;
+}));
 const slotButtons = [];
 const form = document.querySelector("#availability-form");
 const grid = document.querySelector("#availability-grid");
@@ -28,11 +34,11 @@ function lockAvailability(locked) {
   submitButton.disabled = locked;
   document.querySelector("#clear-all").disabled = locked;
   slotButtons.flat().forEach(button => { button.disabled = locked; });
+  modeInputs.forEach(input => { input.disabled = locked; });
 }
 
 function resetSelection() {
-  selectedSlots.clear();
-  slotButtons.flat().forEach(button => button.setAttribute("aria-pressed", "false"));
+  slotButtons.flat().forEach(button => setSlot(button, "unavailable"));
   selectionChanged();
 }
 
@@ -57,11 +63,19 @@ async function loadSavedName() {
         const minutes = time => { const [h, m] = time.split(":").map(Number); return h * 60 + m; };
         for (let slot = 0; day >= 0 && slot < SLOT_COUNT; slot++) {
           const start = FIRST_SLOT + slot * SLOT_LENGTH;
-          if (minutes(range.start_time) <= start && start + SLOT_LENGTH <= minutes(range.end_time)) setSlot(slotButtons[slot][day], true);
+          if (minutes(range.start_time) <= start && start + SLOT_LENGTH <= minutes(range.end_time)) {
+            setSlot(slotButtons[slot][day], preferences.combine(selectedSlots.get(slotKey(day, slot)), range.preference));
+          }
         }
       }
       selectionChanged();
       nameStatus.textContent = `Loaded availability for ${person.name}. Submit to replace it with your changes.`;
+      const needsConversion = person.ranges.some(range => {
+        const start = Number(range.start_time.slice(0, 2)) * 60 + Number(range.start_time.slice(3, 5));
+        const end = Number(range.end_time.slice(0, 2)) * 60 + Number(range.end_time.slice(3, 5));
+        return start < FIRST_SLOT || end > LAST_SLOT + SLOT_LENGTH || start % SLOT_LENGTH !== 0 || end % SLOT_LENGTH !== 0;
+      });
+      if (needsConversion) nameStatus.textContent += " Your old schedule includes times outside the new grid or between its boundaries. Only fully covered 20-minute slots are shown. Review them: saving replaces the old schedule with these slots.";
     } else {
       nameStatus.textContent = "New name. Choose your role and availability, then submit.";
     }
@@ -109,7 +123,7 @@ function buildGrid() {
   const fragment = document.createDocumentFragment();
   for (let slotIndex = 0; slotIndex < SLOT_COUNT; slotIndex++) {
     const row = document.createElement("tr");
-    if (slotIndex % 2 === 0) row.className = "hour-start";
+    if ((FIRST_SLOT + slotIndex * SLOT_LENGTH) % 60 === 0) row.className = "hour-start";
     const start = FIRST_SLOT + slotIndex * SLOT_LENGTH;
     const label = document.createElement("th");
     label.scope = "row";
@@ -124,8 +138,8 @@ function buildGrid() {
       button.className = "slot";
       button.dataset.day = dayIndex;
       button.dataset.slot = slotIndex;
-      button.setAttribute("aria-label", `${day[0].toUpperCase() + day.slice(1)}, ${formatTime(start)} to ${formatTime(start + SLOT_LENGTH)}`);
-      button.setAttribute("aria-pressed", "false");
+      button.dataset.label = `${day[0].toUpperCase() + day.slice(1)}, ${formatTime(start)} to ${formatTime(start + SLOT_LENGTH)}`;
+      setSlot(button, "unavailable");
       button.tabIndex = -1;
       slotButtons[slotIndex][dayIndex] = button;
       cell.append(button);
@@ -145,18 +159,24 @@ function focusSlot(button) {
   button.focus({ preventScroll: true });
 }
 
-function setSlot(button, available) {
+function setSlot(button, preference) {
   const key = slotKey(button.dataset.day, button.dataset.slot);
-  if (available) selectedSlots.add(key);
+  const state = preference === "unavailable" ? "unavailable" : preferences.normalize(preference);
+  if (state !== "unavailable") selectedSlots.set(key, state);
   else selectedSlots.delete(key);
-  button.setAttribute("aria-pressed", String(available));
+  button.dataset.preference = state;
+  button.className = `slot slot-${state}`;
+  button.setAttribute("aria-pressed", String(state !== "unavailable"));
+  button.setAttribute("aria-label", `${button.dataset.label}: ${preferences.labels[state]}`);
+  button.title = `${button.dataset.label}: ${preferences.labels[state]}`;
+  button.textContent = preferences.symbols[state];
 }
 
 function selectionChanged() {
   const count = selectedSlots.size;
-  const hours = count / 2;
+  const totalMinutes = count * SLOT_LENGTH;
   document.querySelector("#selection-summary").textContent = count
-    ? `${count} slot${count === 1 ? "" : "s"} selected · ${hours} hour${hours === 1 ? "" : "s"} per week`
+    ? `${count} slot${count === 1 ? "" : "s"} selected · ${Math.floor(totalMinutes / 60)} h ${totalMinutes % 60} min per week`
     : "No availability selected yet";
   statusMessage.textContent = "";
   if (validationShown) validateForm();
@@ -167,7 +187,7 @@ function paintSlot(button) {
   // Each gesture has one paint mode; revisiting a cell never toggles it again.
   if (drag.visited.has(key)) return;
   drag.visited.add(key);
-  setSlot(button, drag.available);
+  setSlot(button, drag.preference);
   selectionChanged();
 }
 
@@ -176,7 +196,7 @@ grid.addEventListener("pointerdown", (event) => {
   if (!button || !nameReady || isSubmitting || event.button !== 0 || !event.isPrimary || drag) return;
   event.preventDefault();
   focusSlot(button);
-  drag = { pointerId: event.pointerId, available: button.getAttribute("aria-pressed") !== "true", visited: new Set(), x: event.clientX, y: event.clientY };
+  drag = { pointerId: event.pointerId, preference: activeMode, visited: new Set(), x: event.clientX, y: event.clientY };
   grid.setPointerCapture(event.pointerId);
   paintSlot(button);
 });
@@ -213,7 +233,7 @@ grid.addEventListener("click", (event) => {
   // Pointer gestures already painted; zero-detail clicks come from keyboard/assistive activation.
   if (!button || !nameReady || isSubmitting || event.detail !== 0) return;
   focusSlot(button);
-  setSlot(button, button.getAttribute("aria-pressed") !== "true");
+  setSlot(button, activeMode);
   selectionChanged();
 });
 
@@ -239,9 +259,7 @@ document.querySelector("#clear-all").addEventListener("click", () => {
   if (isSubmitting) return;
   if (!nameReady) return;
   endDrag({});
-  selectedSlots.clear();
-  slotButtons.flat().forEach((button) => button.setAttribute("aria-pressed", "false"));
-  selectionChanged();
+  resetSelection();
 });
 
 function validateForm() {
@@ -265,11 +283,12 @@ function buildAvailabilityData(name, role, selection) {
     const ranges = [];
     for (let slot = 0; slot < SLOT_COUNT; slot++) {
       if (!selection.has(slotKey(dayIndex, slot))) continue;
+      const preference = preferences.normalize(selection.get(slotKey(dayIndex, slot)));
       const start = FIRST_SLOT + slot * SLOT_LENGTH;
       const end = start + SLOT_LENGTH;
       const previous = ranges[ranges.length - 1];
-      if (previous && previous.end === formatTime(start)) previous.end = formatTime(end);
-      else ranges.push({ start: formatTime(start), end: formatTime(end) });
+      if (previous && previous.end === formatTime(start) && previous.preference === preference) previous.end = formatTime(end);
+      else ranges.push({ start: formatTime(start), end: formatTime(end), preference });
     }
     if (ranges.length) availability[day] = ranges;
   });
@@ -312,7 +331,9 @@ form.addEventListener("submit", async (event) => {
   } catch (error) {
     console.error("Availability submission failed:", error);
     statusMessage.classList.add("is-error");
-    statusMessage.textContent = "We couldn't confirm your save. Your selections are still here. Check your connection and retry; saving the same name replaces its availability.";
+    statusMessage.textContent = error.code === "PGRST202"
+      ? "Database setup needs updating: run supabase-preferences.sql in Supabase SQL Editor, then retry. Your preferences are still here."
+      : "We couldn't confirm your save. Your selections are still here. Check your connection and retry; saving the same name replaces its availability.";
   } finally {
     controls.forEach((control, index) => { control.disabled = disabledStates[index]; });
     submitButton.innerHTML = submitButtonLabel;

@@ -13,11 +13,12 @@
   const slotDialogTitle = document.querySelector("#slot-dialog-title");
   const slotDialogPeople = document.querySelector("#slot-dialog-people");
   const palette = ["#dceafb", "#dcefe3", "#f9e5d0", "#eee1f7", "#f6dfe5", "#d8eeee", "#f3edce", "#e5e7f6", "#e7eddb", "#f4e3d9", "#e0eced", "#efe3eb"];
-  const firstMinute = 8 * 60;
-  const lastMinute = 22 * 60;
-  const interval = 30;
+  const firstMinute = 11 * 60 + 40;
+  const lastMinute = 19 * 60 - 20;
+  const interval = 20;
   const weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
   const nameOrder = new Intl.Collator("en", { sensitivity: "base", numeric: true });
+  const preferences = window.AvailabilityPreferences;
   let activeRequest = null;
 
   function getColorForPerson(personId) {
@@ -44,22 +45,23 @@
   function buildCalendarData(records) {
     const people = new Map();
     const slots = Object.fromEntries(weekdays.map(day => [day, Array.from(
-      { length: (lastMinute - firstMinute) / interval + 1 }, () => new Set())]));
+      { length: (lastMinute - firstMinute) / interval + 1 }, () => new Map())]));
     for (const record of records) {
       if (!slots[record.day]) continue;
       people.set(record.person_id, { id: record.person_id, name: record.name, role: record.role });
       const start = toMinutes(record.start_time);
       const end = toMinutes(record.end_time);
       for (let minute = firstMinute; minute <= lastMinute; minute += interval) {
-        // End is exclusive; include only half-hour cells fully covered by the range.
+        // End is exclusive; include only 20-minute cells fully covered by the range.
         if (start <= minute && minute + interval <= end) {
-          slots[record.day][(minute - firstMinute) / interval].add(record.person_id);
+          const cell = slots[record.day][(minute - firstMinute) / interval];
+          cell.set(record.person_id, preferences.combine(cell.get(record.person_id), record.preference));
         }
       }
     }
     const sortedPeople = [...people.values()].sort(comparePeople);
     return { people: sortedPeople, slots: Object.fromEntries(weekdays.map(day => [day,
-      slots[day].map(ids => [...ids].map(id => people.get(id)).sort(comparePeople))])) };
+      slots[day].map(entries => [...entries].map(([id, preference]) => ({ ...people.get(id), preference })).sort(comparePeople))])) };
   }
 
   function personLabel(person) {
@@ -67,6 +69,16 @@
     pill.className = `person-pill${person.role === "coach" ? " person-coach" : ""}`;
     pill.style.backgroundColor = getColorForPerson(person.id);
     pill.title = `${person.name} — ${person.role === "coach" ? "Coach" : "Student"}`;
+    if (person.preference !== undefined) {
+      const preference = preferences.normalize(person.preference);
+      const marker = document.createElement("span");
+      marker.className = `preference-marker preference-${preference}`;
+      marker.textContent = preferences.symbols[preference];
+      marker.setAttribute("aria-hidden", "true");
+      pill.append(marker);
+      pill.title += ` — ${preferences.labels[preference]}`;
+    }
+    pill.setAttribute("aria-label", pill.title);
     const name = document.createElement("span");
     name.className = "person-name";
     name.textContent = person.name;
@@ -112,6 +124,10 @@
         for (const person of people) {
           const item = document.createElement("li");
           item.append(personLabel(person));
+          const description = document.createElement("span");
+          description.className = "hint";
+          description.textContent = `${person.role === "coach" ? "Coach" : "Student"} — ${preferences.labels[preferences.normalize(person.preference)]}`;
+          item.append(description);
           fragment.append(item);
         }
         slotDialogPeople.replaceChildren(fragment);
@@ -163,7 +179,7 @@
     for (const record of sortAvailability(rows)) {
       const row = document.createElement("tr");
       const values = [record.name, record.role, record.day[0].toUpperCase() + record.day.slice(1),
-        record.start_time.slice(0, 5), record.end_time.slice(0, 5)];
+        record.start_time.slice(0, 5), record.end_time.slice(0, 5), preferences.labels[preferences.normalize(record.preference)]];
       for (const value of values) {
         const cell = document.createElement("td");
         // Names are user-submitted content, never HTML.

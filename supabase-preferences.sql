@@ -1,38 +1,17 @@
--- Run once in Supabase SQL Editor as the database owner, after the initial schema.
--- Consolidates duplicate names, preserving every distinct availability range.
+-- Existing database: run this ENTIRE file after the unique-name and 20-minute migrations.
+-- Keeps all existing rows, giving them preference = 'available'.
 begin;
-lock table public.people, public.availability in access exclusive mode;
+alter table public.availability
+  add column if not exists preference text not null default 'available';
+alter table public.availability alter column preference set default 'available';
+update public.availability set preference = 'available' where preference is null;
+alter table public.availability alter column preference set not null;
+alter table public.availability drop constraint if exists availability_preference_check;
+alter table public.availability add constraint availability_preference_check
+  check (preference in ('preferred', 'available', 'possible'));
+grant select (preference) on public.availability to anon;
 
-create or replace function public.normalize_person_name(p_name text)
-returns text language sql immutable strict set search_path = ''
-as $$ select lower(regexp_replace(p_name, '^[[:space:]]+|[[:space:]]+$', '', 'g')); $$;
-
--- Each statement defines its own mapping; no temporary-table lifetime dependency.
-with person_merge_map as (
-  select id, first_value(id) over (
-    partition by public.normalize_person_name(name) order by created_at, id
-  ) as keep_id from public.people
-)
-insert into public.availability (person_id, day, start_time, end_time)
-select distinct m.keep_id, a.day, a.start_time, a.end_time
-from public.availability a join person_merge_map m on m.id = a.person_id
-where m.id <> m.keep_id
-on conflict (person_id, day, start_time, end_time) do nothing;
-with person_merge_map as (
-  select id, first_value(id) over (
-    partition by public.normalize_person_name(name) order by created_at, id
-  ) as keep_id from public.people
-)
-delete from public.people p using person_merge_map m
-where p.id = m.id and m.id <> m.keep_id;
-
-create unique index if not exists people_unique_normalized_name
-on public.people (public.normalize_person_name(name));
-
--- Only these narrow RPCs may write; do not expose general UPDATE/DELETE access.
-revoke insert on public.people, public.availability from anon;
-revoke insert (id, name, role) on public.people from anon;
-revoke insert (person_id, day, start_time, end_time) on public.availability from anon;
+-- The complete updated save and lookup functions follow below.
 
 create or replace function public.submit_availability(p_name text, p_role text, p_ranges jsonb)
 returns uuid language plpgsql security definer set search_path = ''
@@ -60,9 +39,9 @@ begin
   returning id into saved_person_id;
 
   delete from public.availability where person_id = saved_person_id;
-  insert into public.availability (person_id, day, start_time, end_time)
-  select saved_person_id, r.day, r.start_time, r.end_time
-  from jsonb_to_recordset(p_ranges) as r(day text, start_time time, end_time time);
+  insert into public.availability (person_id, day, start_time, end_time, preference)
+  select saved_person_id, r.day, r.start_time, r.end_time, coalesce(r.preference, 'available')
+  from jsonb_to_recordset(p_ranges) as r(day text, start_time time, end_time time, preference text);
   -- Any invalid range rolls back the replacement, preserving the previous schedule.
   return saved_person_id;
 end;
@@ -73,7 +52,7 @@ returns jsonb language sql stable security definer set search_path = ''
 as $$
   select jsonb_build_object('id', p.id, 'name', p.name, 'role', p.role,
     'ranges', coalesce((select jsonb_agg(jsonb_build_object(
-      'day', a.day, 'start_time', a.start_time, 'end_time', a.end_time))
+      'day', a.day, 'start_time', a.start_time, 'end_time', a.end_time, 'preference', a.preference))
       from public.availability a where a.person_id = p.id), '[]'::jsonb))
   from public.people p
   where public.normalize_person_name(p.name) = public.normalize_person_name(p_name);
@@ -84,5 +63,13 @@ revoke all on function public.submit_availability(text, text, jsonb) from public
 revoke all on function public.get_person_availability(text) from public, anon, authenticated;
 grant execute on function public.submit_availability(text, text, jsonb) to anon;
 grant execute on function public.get_person_availability(text) to anon;
+
+-- New clients use this endpoint so an unmigrated database fails visibly instead
+-- of silently ignoring preference fields in the old JSON payload.
+create or replace function public.submit_availability_with_preferences(p_name text, p_role text, p_ranges jsonb)
+returns uuid language sql security invoker set search_path = ''
+as $$ select public.submit_availability(p_name, p_role, p_ranges); $$;
+revoke all on function public.submit_availability_with_preferences(text, text, jsonb) from public, anon, authenticated;
+grant execute on function public.submit_availability_with_preferences(text, text, jsonb) to anon;
 notify pgrst, 'reload schema';
 commit;

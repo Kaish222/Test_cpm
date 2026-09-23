@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
   <script src="supabase-config.js" defer></script>
+  <script src="preferences.js" defer></script>
   <script src="supabase-api.js" defer></script>
   <script src="script.js" defer></script>
   <script src="coach-dashboard.js" defer></script>
@@ -45,11 +46,18 @@
         <div class="schedule-header">
           <div>
             <div class="section-heading"><span class="step">02</span><h2 id="schedule-title">Your weekly availability</h2></div>
-            <p id="grid-help" class="hint">Click or drag to select. Start on a selected slot to erase.</p>
+            <p id="grid-help" class="hint">Choose a mode, then click or drag to apply it. Use Eraser to remove availability.</p>
           </div>
-          <span class="legend"><span class="legend-swatch"></span> Available</span>
         </div>
-        <div class="grid-meta"><span>30-minute slots · 08:00–22:30</span><span>Repeats every week</span></div>
+        <fieldset id="availability-modes" class="availability-modes" aria-describedby="preference-help">
+          <legend>Paint mode</legend>
+          <label class="mode-option mode-preferred"><input type="radio" name="availability-mode" value="preferred"><span>★ Preferred</span></label>
+          <label class="mode-option mode-available"><input type="radio" name="availability-mode" value="available" checked><span>● Available</span></label>
+          <label class="mode-option mode-possible"><input type="radio" name="availability-mode" value="possible"><span>◇ Possible</span></label>
+          <label class="mode-option mode-unavailable"><input type="radio" name="availability-mode" value="unavailable"><span>Eraser</span></label>
+        </fieldset>
+        <p id="preference-help" class="hint preference-help">All three colors mean you can attend: green = preferred, blue = available, yellow = possible but less convenient.</p>
+        <div class="grid-meta"><span>20-minute slots · 11:40–19:00</span><span>Repeats every week</span></div>
         <div class="grid-scroll" role="region" aria-label="Weekly availability; scroll for more days and times" tabindex="0">
           <table id="availability-grid" aria-describedby="grid-help keyboard-help availability-error">
             <caption class="sr-only">Weekly availability, Monday through Sunday</caption>
@@ -61,7 +69,7 @@
           <p id="selection-summary" role="status">No availability selected yet</p>
           <button id="clear-all" class="button button-quiet" type="button">Clear all</button>
         </div>
-        <p id="keyboard-help" class="hint keyboard-help">Keyboard: use arrow keys to move between slots, and Space or Enter to toggle. On touch screens, drag inside the grid to select; use its edges to scroll.</p>
+        <p id="keyboard-help" class="hint keyboard-help">Keyboard: use arrow keys to move between slots, and Space or Enter to apply the chosen mode. On touch screens, drag inside the grid to paint; use its edges to scroll.</p>
         <p id="availability-error" class="error grid-error"></p>
       </section>
 
@@ -83,10 +91,15 @@
           <h3>People <span class="hint">· C = Coach</span></h3>
           <ul id="calendar-legend" class="calendar-legend" aria-label="People and their colors"></ul>
         </div>
-        <p class="hint calendar-help">30-minute slots · Hover a label for its full name. Use “more” to see everyone in a busy slot.</p>
+        <p class="hint calendar-help">20-minute slots · Hover a label for its full name and preference. Use “more” to see everyone in a busy slot.</p>
+        <div class="preference-key" aria-label="Preference indicators">
+          <span><span class="preference-marker preference-preferred" aria-hidden="true">★</span> Preferred</span>
+          <span><span class="preference-marker preference-available" aria-hidden="true">●</span> Available</span>
+          <span><span class="preference-marker preference-possible" aria-hidden="true">◇</span> Possible</span>
+        </div>
         <div class="calendar-scroll" role="region" aria-label="Read-only weekly availability calendar" tabindex="0">
           <table class="coach-calendar">
-            <caption class="sr-only">People available each half hour, Monday through Sunday. Coaches are shown first.</caption>
+            <caption class="sr-only">People available each 20-minute slot, Monday through Sunday. Coaches are shown first.</caption>
             <thead><tr><th scope="col" class="calendar-time">Time</th><th scope="col">Monday</th><th scope="col">Tuesday</th><th scope="col">Wednesday</th><th scope="col">Thursday</th><th scope="col">Friday</th><th scope="col">Saturday</th><th scope="col">Sunday</th></tr></thead>
             <tbody id="calendar-rows"></tbody>
           </table>
@@ -96,7 +109,7 @@
           <div class="dashboard-scroll" role="region" aria-label="Submitted availability table" tabindex="0">
         <table class="dashboard-table">
           <caption class="sr-only">Submitted availability sorted by weekday, start time, and name</caption>
-          <thead><tr><th scope="col">Name</th><th scope="col">Role</th><th scope="col">Day</th><th scope="col">Start time</th><th scope="col">End time</th></tr></thead>
+          <thead><tr><th scope="col">Name</th><th scope="col">Role</th><th scope="col">Day</th><th scope="col">Start time</th><th scope="col">End time</th><th scope="col">Preference</th></tr></thead>
           <tbody id="dashboard-rows"></tbody>
         </table>
           </div>
@@ -104,7 +117,7 @@
       </div>
       <dialog id="slot-dialog" class="slot-dialog" aria-labelledby="slot-dialog-title">
         <h3 id="slot-dialog-title"></h3>
-        <p class="hint">Everyone available for this half hour</p>
+        <p class="hint">Everyone available for this 20-minute slot</p>
         <ul id="slot-dialog-people" class="slot-dialog-people"></ul>
         <form method="dialog"><button class="button button-quiet">Close</button></form>
       </dialog>

@@ -18,6 +18,82 @@ let validationShown = false;
 let isSubmitting = false;
 const submitButton = form.querySelector('button[type="submit"]');
 const submitButtonLabel = submitButton.innerHTML;
+const nameStatus = document.querySelector("#name-status");
+let nameReady = false;
+let nameRequest = null;
+let nameTimer;
+
+function lockAvailability(locked) {
+  roleInput.disabled = locked;
+  submitButton.disabled = locked;
+  document.querySelector("#clear-all").disabled = locked;
+  slotButtons.flat().forEach(button => { button.disabled = locked; });
+}
+
+function resetSelection() {
+  selectedSlots.clear();
+  slotButtons.flat().forEach(button => button.setAttribute("aria-pressed", "false"));
+  selectionChanged();
+}
+
+async function loadSavedName() {
+  if (!nameInput.value.trim() || isSubmitting) return;
+  nameRequest?.abort();
+  const request = new AbortController();
+  nameRequest = request;
+  nameReady = false;
+  lockAvailability(true);
+  nameStatus.textContent = "Looking up your saved availability...";
+  const timeout = setTimeout(() => request.abort(), 20000);
+  try {
+    const person = await window.availabilityStorage.fetchPersonAvailability(nameInput.value.trim(), request.signal);
+    if (nameRequest !== request) return;
+    if (request.signal.aborted) throw new Error("Name lookup timed out");
+    resetSelection();
+    if (person) {
+      roleInput.value = person.role;
+      for (const range of person.ranges) {
+        const day = DAYS.indexOf(range.day);
+        const minutes = time => { const [h, m] = time.split(":").map(Number); return h * 60 + m; };
+        for (let slot = 0; day >= 0 && slot < SLOT_COUNT; slot++) {
+          const start = FIRST_SLOT + slot * SLOT_LENGTH;
+          if (minutes(range.start_time) <= start && start + SLOT_LENGTH <= minutes(range.end_time)) setSlot(slotButtons[slot][day], true);
+        }
+      }
+      selectionChanged();
+      nameStatus.textContent = `Loaded availability for ${person.name}. Submit to replace it with your changes.`;
+    } else {
+      nameStatus.textContent = "New name. Choose your role and availability, then submit.";
+    }
+    roleInput.dispatchEvent(new Event("change"));
+    nameReady = true;
+    lockAvailability(false);
+  } catch (error) {
+    if (nameRequest !== request) return;
+    console.error("Name lookup failed:", error);
+    nameStatus.textContent = "Could not load this name. Check your connection and database setup, then leave the name field to retry.";
+  } finally {
+    clearTimeout(timeout);
+    if (nameRequest === request) nameRequest = null;
+  }
+}
+
+nameInput.addEventListener("input", () => {
+  clearTimeout(nameTimer);
+  nameRequest?.abort();
+  nameRequest = null;
+  nameReady = false;
+  endDrag({});
+  resetSelection();
+  roleInput.value = "";
+  roleInput.dispatchEvent(new Event("change"));
+  lockAvailability(true);
+  nameStatus.textContent = nameInput.value.trim() ? "Checking name..." : "Enter your unique name to load your saved availability.";
+  if (nameInput.value.trim()) nameTimer = setTimeout(loadSavedName, 500);
+});
+nameInput.addEventListener("blur", () => {
+  if (!nameReady && !nameRequest) { clearTimeout(nameTimer); loadSavedName(); }
+});
 
 function formatTime(minutes) {
   return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
@@ -95,7 +171,7 @@ function paintSlot(button) {
 
 grid.addEventListener("pointerdown", (event) => {
   const button = event.target.closest(".slot");
-  if (!button || isSubmitting || event.button !== 0 || !event.isPrimary || drag) return;
+  if (!button || !nameReady || isSubmitting || event.button !== 0 || !event.isPrimary || drag) return;
   event.preventDefault();
   focusSlot(button);
   drag = { pointerId: event.pointerId, available: button.getAttribute("aria-pressed") !== "true", visited: new Set(), x: event.clientX, y: event.clientY };
@@ -133,7 +209,7 @@ window.addEventListener("blur", endDrag);
 grid.addEventListener("click", (event) => {
   const button = event.target.closest(".slot");
   // Pointer gestures already painted; zero-detail clicks come from keyboard/assistive activation.
-  if (!button || isSubmitting || event.detail !== 0) return;
+  if (!button || !nameReady || isSubmitting || event.detail !== 0) return;
   focusSlot(button);
   setSlot(button, button.getAttribute("aria-pressed") !== "true");
   selectionChanged();
@@ -159,6 +235,7 @@ grid.addEventListener("keydown", (event) => {
 
 document.querySelector("#clear-all").addEventListener("click", () => {
   if (isSubmitting) return;
+  if (!nameReady) return;
   endDrag({});
   selectedSlots.clear();
   slotButtons.flat().forEach((button) => button.setAttribute("aria-pressed", "false"));
@@ -205,6 +282,7 @@ function buildAvailabilityData(name, role, selection) {
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (isSubmitting) return;
+  if (!nameReady) { nameStatus.textContent = "Enter your name and wait for its saved availability to load before submitting."; return; }
   validationShown = true;
   const errors = validateForm();
   const invalid = Object.values(errors).some(Boolean);
@@ -228,10 +306,11 @@ form.addEventListener("submit", async (event) => {
   try {
     await window.availabilityStorage.submitAvailability(data);
     statusMessage.textContent = "Availability saved successfully.";
+    window.dispatchEvent(new Event("availability-saved"));
   } catch (error) {
     console.error("Availability submission failed:", error);
     statusMessage.classList.add("is-error");
-    statusMessage.textContent = "We couldn't confirm your save. Your selections are still here. Check your connection or ask the site owner to check setup. If the connection dropped, check the database before retrying to avoid duplicates.";
+    statusMessage.textContent = "We couldn't confirm your save. Your selections are still here. Check your connection and retry; saving the same name replaces its availability.";
   } finally {
     controls.forEach((control, index) => { control.disabled = disabledStates[index]; });
     submitButton.innerHTML = submitButtonLabel;
@@ -241,3 +320,5 @@ form.addEventListener("submit", async (event) => {
 });
 
 buildGrid();
+lockAvailability(true);
+if (nameInput.value.trim()) loadSavedName();

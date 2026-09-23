@@ -231,5 +231,10 @@
 
   roleSelector.addEventListener("change", updateDashboardVisibility);
   refreshButton.addEventListener("click", loadCoachDashboard);
+  window.addEventListener("availability-saved", () => {
+    activeRequest?.abort();
+    activeRequest = null;
+    if (roleSelector.value === "coach") loadCoachDashboard();
+  });
   updateDashboardVisibility();
 })();

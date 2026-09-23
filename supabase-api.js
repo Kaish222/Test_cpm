@@ -39,7 +39,7 @@ window.availabilityStorage = (() => {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20000);
     try {
-      // Both inserts share a transaction; return only the new UUID without table SELECT.
+      // Atomically create or replace the schedule for this unique name.
       const { data, error } = await supabaseClient.rpc("submit_availability", {
         p_name: person.name,
         p_role: person.role,
@@ -79,5 +79,12 @@ window.availabilityStorage = (() => {
     return rows;
   }
 
-  return { submitAvailability, fetchAllAvailability };
+  async function fetchPersonAvailability(name, signal) {
+    const { data, error } = await getClient().rpc("get_person_availability", { p_name: name })
+      .abortSignal(signal);
+    if (error) throw error;
+    return data;
+  }
+
+  return { submitAvailability, fetchAllAvailability, fetchPersonAvailability };
 })();
